@@ -1,5 +1,5 @@
-const REVIEW_AUTHOR_GEMINI_INTERACTIONS_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions';
-const REVIEW_AUTHOR_GEMINI_MODELS_URL = 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1';
+const REVIEW_AUTHOR_GEMINI_INTERACTIONS_URL = 'https://generativelanguage.googleapis.com/v1/interactions';
+const REVIEW_AUTHOR_GEMINI_MODELS_URL = 'https://generativelanguage.googleapis.com/v1/models?pageSize=1';
 const REVIEW_AUTHOR_GEMINI_MODELS = Object.freeze([
   {
     id: 'gemini-3.6-flash',
@@ -95,6 +95,19 @@ async function geminiGenerateFollowUpQuestions(request, apiKey) {
   return parseFollowUpQuestions(outputText);
 }
 
+function buildGeminiInteractionRequest({ model, prompt, schema }) {
+  return {
+    model,
+    input: prompt,
+    store: false,
+    response_format: {
+      type: 'text',
+      mime_type: 'application/json',
+      schema
+    }
+  };
+}
+
 async function geminiCreateStructuredInteraction({ model, prompt, schema, apiKey }) {
   if (!apiKey) {
     throw createProviderError({
@@ -118,25 +131,24 @@ async function geminiCreateStructuredInteraction({ model, prompt, schema, apiKey
       'Content-Type': 'application/json',
       'x-goog-api-key': apiKey
     },
-    body: JSON.stringify({
-      model,
-      input: prompt,
-      response_format: {
-        type: 'text',
-        mime_type: 'application/json',
-        schema
-      }
-    })
+    body: JSON.stringify(buildGeminiInteractionRequest({ model, prompt, schema }))
   }, true);
 
   const payload = await response.json();
   const outputText = extractGeminiOutputText(payload);
 
   if (!outputText) {
+    const status = String(payload?.status || '').toLowerCase();
+    const message = status === 'incomplete'
+      ? 'Gemini returned an incomplete response.'
+      : status === 'failed'
+        ? 'Gemini failed to generate the review.'
+        : 'Gemini returned no review text.';
+
     throw createProviderError({
       provider: REVIEW_AUTHOR_PROVIDER_GEMINI,
       code: 'INVALID_RESPONSE',
-      message: 'Gemini returned no review text.'
+      message
     });
   }
 
@@ -200,9 +212,10 @@ async function createGeminiHttpError(response) {
   }
 
   let code = 'UNKNOWN_PROVIDER_ERROR';
-  if (response.status === 400) code = 'INVALID_RESPONSE';
+  if (response.status === 400) code = 'INVALID_REQUEST';
   if (response.status === 401 || response.status === 403) code = 'INVALID_CREDENTIALS';
   if (response.status === 404) code = 'MODEL_UNAVAILABLE';
+  if (response.status === 413) code = 'REQUEST_TOO_LARGE';
   if (response.status === 429) code = 'RATE_LIMITED';
   if (response.status >= 500) code = 'PROVIDER_OVERLOADED';
 
