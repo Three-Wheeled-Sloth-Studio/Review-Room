@@ -100,6 +100,7 @@ function buildGeminiInteractionRequest({ model, prompt, schema }) {
     model,
     input: prompt,
     store: false,
+    stream: true,
     response_format: {
       type: 'text',
       mime_type: 'application/json',
@@ -128,31 +129,152 @@ async function geminiCreateStructuredInteraction({ model, prompt, schema, apiKey
   const response = await geminiFetch(REVIEW_AUTHOR_GEMINI_INTERACTIONS_URL, {
     method: 'POST',
     headers: {
+      'Accept': 'text/event-stream',
       'Content-Type': 'application/json',
       'x-goog-api-key': apiKey
     },
     body: JSON.stringify(buildGeminiInteractionRequest({ model, prompt, schema }))
   }, true);
 
-  const payload = await response.json();
-  const outputText = extractGeminiOutputText(payload);
+  const contentType = response.headers.get('content-type') || '';
+  const outputText = contentType.includes('text/event-stream')
+    ? await readGeminiInteractionStream(response)
+    : extractGeminiOutputText(await response.json());
 
   if (!outputText) {
-    const status = String(payload?.status || '').toLowerCase();
-    const message = status === 'incomplete'
-      ? 'Gemini returned an incomplete response.'
-      : status === 'failed'
-        ? 'Gemini failed to generate the review.'
-        : 'Gemini returned no review text.';
-
     throw createProviderError({
       provider: REVIEW_AUTHOR_PROVIDER_GEMINI,
       code: 'INVALID_RESPONSE',
-      message
+      message: 'Gemini returned no review text.'
     });
   }
 
   return outputText;
+}
+
+async function readGeminiInteractionStream(response) {
+  if (!response.body?.getReader) {
+    throw createProviderError({
+      provider: REVIEW_AUTHOR_PROVIDER_GEMINI,
+      code: 'INVALID_RESPONSE',
+      message: 'Gemini returned an unreadable response stream.'
+    });
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const keepAliveTimer = startExtensionServiceWorkerKeepAlive();
+  let pending = '';
+  let outputText = '';
+  let terminalStatus = '';
+
+  function consumeEventBlock(block) {
+    const event = parseGeminiSseEventBlock(block);
+    if (!event) return;
+
+    outputText += extractGeminiStreamEventText(event);
+    const status = String(event?.interaction?.status || '').toLowerCase();
+    if (status) terminalStatus = status;
+
+    if (event.event_type === 'interaction.failed' || status === 'failed' || status === 'cancelled') {
+      throw createProviderError({
+        provider: REVIEW_AUTHOR_PROVIDER_GEMINI,
+        code: 'INVALID_RESPONSE',
+        message: 'Gemini failed before completing the review.'
+      });
+    }
+
+    if (status === 'incomplete') {
+      throw createProviderError({
+        provider: REVIEW_AUTHOR_PROVIDER_GEMINI,
+        code: 'INVALID_RESPONSE',
+        message: 'Gemini returned an incomplete review.'
+      });
+    }
+  }
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      pending += decoder.decode(value || new Uint8Array(), { stream: !done });
+      pending = pending.replace(/\r\n/g, '\n');
+
+      const blocks = pending.split('\n\n');
+      pending = blocks.pop() || '';
+      blocks.forEach(consumeEventBlock);
+
+      if (done) break;
+    }
+
+    if (pending.trim()) {
+      consumeEventBlock(pending);
+    }
+  } catch (error) {
+    if (error?.code) throw error;
+    throw createProviderError({
+      provider: REVIEW_AUTHOR_PROVIDER_GEMINI,
+      code: 'NETWORK_ERROR',
+      message: 'The Gemini response stream ended unexpectedly.'
+    });
+  } finally {
+    if (keepAliveTimer) clearInterval(keepAliveTimer);
+  }
+
+  if (terminalStatus && terminalStatus !== 'completed') {
+    throw createProviderError({
+      provider: REVIEW_AUTHOR_PROVIDER_GEMINI,
+      code: 'INVALID_RESPONSE',
+      message: `Gemini ended with status ${terminalStatus}.`
+    });
+  }
+
+  return outputText;
+}
+
+function parseGeminiSseEventBlock(block) {
+  const data = String(block || '')
+    .split(/\r?\n/)
+    .filter(line => line.startsWith('data:'))
+    .map(line => line.slice(5).trimStart())
+    .join('\n')
+    .trim();
+
+  if (!data || data === '[DONE]') return null;
+
+  try {
+    return JSON.parse(data);
+  } catch (error) {
+    throw createProviderError({
+      provider: REVIEW_AUTHOR_PROVIDER_GEMINI,
+      code: 'INVALID_RESPONSE',
+      message: 'Gemini returned malformed streaming data.'
+    });
+  }
+}
+
+function extractGeminiStreamEventText(event) {
+  if (event?.event_type === 'step.delta' && event?.delta?.type === 'text') {
+    return typeof event.delta.text === 'string' ? event.delta.text : '';
+  }
+
+  if (event?.event_type === 'step.start' && event?.step?.type === 'model_output') {
+    return extractGeminiOutputText({ steps: [event.step] });
+  }
+
+  return '';
+}
+
+function startExtensionServiceWorkerKeepAlive() {
+  if (typeof chrome === 'undefined' || !chrome.runtime?.getPlatformInfo) return null;
+
+  return setInterval(() => {
+    try {
+      const result = chrome.runtime.getPlatformInfo();
+      if (result?.catch) result.catch(() => {});
+    } catch (error) {
+      // The request result is irrelevant. The extension API call resets Chrome's idle timer.
+    }
+  }, 20000);
 }
 
 async function geminiFetch(url, options, allowRetry) {
