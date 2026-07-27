@@ -6,13 +6,28 @@ Pull request: #1
 
 ## QA status
 
-Automated QA is green. A live Chrome smoke test with a real Gemini authorization key remains required before merging.
+Automated and manual QA are green. The Gemini BYOK increment is cleared for merge.
 
 Validated in GitHub Actions:
 
 - Node automated tests.
 - JavaScript syntax checks for extension scripts.
 - Manifest JSON parsing.
+
+Validated manually in Chrome with a real Gemini authorization key:
+
+- Provider selection and model selection.
+- Gemini key validation and session-only storage.
+- Remember-key-on-device behavior.
+- Key clearing and missing-key recovery.
+- Initial Gemini review generation.
+- Gemini regeneration with feedback.
+- Gemini follow-up question generation.
+- Blocking `Generating Review` operation layer.
+- Locked controls during generation.
+- Completed title, stars, and review rendering.
+- Failure recovery without losing the prior usable draft.
+- Ollama initial generation and regeneration regression checks.
 
 ## Blocking findings corrected
 
@@ -70,24 +85,9 @@ The repository now includes `.github/workflows/qa.yml`.
 
 It runs on pull requests and on pushes to `master`, covering tests, syntax validation, and manifest parsing. Pull-request branches do not receive a duplicate push-triggered run.
 
-## Manual smoke test required
+## Release recommendation
 
-1. Check out `chore/update-project-ownership-and-gitignore`.
-2. Open `chrome://extensions`.
-3. Reload or load the repository as an unpacked extension.
-4. Open Provider Settings.
-5. Enter a current Gemini authorization key from Google AI Studio.
-6. Validate and save it in session-only mode.
-7. Open an Amazon product page.
-8. Select Gemini and create a review.
-9. Confirm the blocking `Generating Review` layer is unmistakable and controls cannot be used underneath it.
-10. Confirm the completed title, stars, and review appear after generation.
-11. Regenerate using feedback and confirm the prior draft survives any forced failure.
-12. Generate follow-up questions.
-13. Restart Chrome and confirm a session-only key is cleared.
-14. Repeat with `Remember this key on this device` and confirm it persists.
-15. Clear the key and confirm Gemini becomes unavailable until reconfigured.
-16. Repeat initial generation and regeneration with Ollama to confirm no local-provider regression.
+PR #1 is ready to merge. After merge, pull `master` on the development machine and reload the unpacked extension from the merged checkout.
 
 ## Non-blocking follow-ups
 
