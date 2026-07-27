@@ -62,17 +62,17 @@ todos:
     area: ui
     summary: On provider failure, remove the workspace lock, preserve the previous usable draft, and display a normalized non-secret-bearing error.
   - id: test-provider-and-secret-boundaries
-    status: active
+    status: closed
     area: testing
-    summary: Automated core and Gemini provider tests are in place; browser-level session migration, duplicate-request, settings-navigation, and failure-recovery validation remain in the manual smoke pass.
+    summary: Automated tests and the full browser smoke pass cover provider selection, credential handling, secret redaction, generation, regeneration, follow-up questions, blocking-state behavior, failure recovery, and Ollama regression.
   - id: update-gemini-user-documentation
     status: closed
     area: documentation
     summary: Update README and project references with Gemini BYOK setup, settings navigation, remote-data handling, credential storage behavior, and validation steps.
   - id: manual-smoke-full-tab-workspace
-    status: open
+    status: closed
     area: testing
-    summary: Verify in Chrome that provider selection, initial generation, copy controls, follow-up questions, regeneration, the blocking overlay, and failure recovery work end to end.
+    summary: Chrome manual QA passed for provider selection, Gemini credentials, initial generation, copy controls, follow-up questions, regeneration, the blocking overlay, failure recovery, and Ollama regression.
   - id: design-provider-stage-tracker
     status: backlog
     area: ui
