@@ -1,14 +1,26 @@
 version: 1
-updated: 2026-06-15
+updated: 2026-07-27
 roadmap:
   - id: full-tab-review-workspace
     horizon: now
     status: active
-    summary: Durable Chrome tab now owns generation, review output, title, operation buttons, feedback iteration, keyword/topic gaps, and follow-up question workflows.
+    summary: Durable Chrome tab owns generation, review output, title, operation buttons, feedback iteration, keyword/topic gaps, and follow-up question workflows.
   - id: stabilize-local-extension
     horizon: now
     status: active
-    summary: Keep the Chrome extension reliable for local Amazon review drafting with Ollama.
+    summary: Keep the Chrome extension reliable for local Amazon review drafting with Ollama while provider boundaries are introduced.
+  - id: gemini-byok-provider
+    horizon: now
+    status: planned
+    summary: Add Gemini as an optional remote provider using only user-supplied credentials, extension settings, structured output, provider-aware sessions, and no studio-hosted service or studio-owned key.
+  - id: blocking-generation-state
+    horizon: now
+    status: planned
+    summary: Lock the review workspace during generation and show a dominant Generating Review state with an animated indeterminate progress bar and honest operation messages.
+  - id: provider-stage-tracker
+    horizon: next
+    status: nice-to-have
+    summary: Evolve the generation overlay toward a Domino's Pizza Tracker-style stage display with completed, active, and pending states, without inventing percentage completion.
   - id: review-history
     horizon: next
     status: planned
@@ -16,11 +28,11 @@ roadmap:
   - id: improve-generation-quality
     horizon: next
     status: planned
-    summary: Strengthen prompt handling, JSON recovery, guidance editing, and result validation without inventing reviewer experiences.
-  - id: provider-abstraction
+    summary: Strengthen prompt handling, structured response validation, guidance editing, and deterministic cleanup without inventing reviewer experiences.
+  - id: existing-review-enrichment
     horizon: later
-    status: planned
-    summary: Introduce a provider boundary for hosted or pluggable model providers after the MVP remains stable on Ollama.
+    status: scoped
+    summary: Optionally sample a limited number of visible Amazon reviews for topic and vocabulary enrichment while preventing copied wording or borrowed user experiences.
   - id: browser-and-release-readiness
     horizon: later
     status: scoped
