@@ -1,1 +1,23 @@
+# Agent Academy metadata
 _metadata/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local.json
+*.local.js
+secrets/
+config/private/
+
+# Dependencies and generated output
+node_modules/
+dist/
+build/
+coverage/
+test-results/
+
+# Logs and operating-system clutter
+*.log
+.DS_Store
+Thumbs.db
