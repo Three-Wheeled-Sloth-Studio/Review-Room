@@ -1,5 +1,5 @@
 version: 1
-updated: 2026-06-15
+updated: 2026-07-27
 todos:
   - id: confirm-harness-decisions
     status: closed
@@ -21,23 +21,75 @@ todos:
     status: closed
     area: generation
     summary: Plan model-generated questions asking what a good review of this product would answer that the original pass did not cover.
-  - id: manual-smoke-full-tab-workspace
-    status: open
+  - id: document-gemini-byok-handoff
+    status: closed
+    area: planning
+    summary: Record the Gemini BYOK scope, security decisions, implementation sequence, blocking generation UX, testing expectations, and next-machine start path.
+  - id: implement-provider-boundary
+    status: closed
+    area: architecture
+    summary: Extract Ollama networking from review-core.js, route provider requests through the extension service worker, and preserve provider-neutral prompts, validation, cleanup, and copy logic.
+  - id: migrate-review-session-provider
+    status: closed
+    area: persistence
+    summary: Add provider, model, and providerConfigVersion to review sessions while treating legacy sessions as Ollama and never persisting provider credentials.
+  - id: add-extension-provider-settings
+    status: closed
+    area: product
+    summary: Add an options_ui settings page and direct UI entry points for provider configuration, including a Configure Gemini route when the selected provider has no key.
+  - id: implement-gemini-key-storage
+    status: closed
+    area: security
+    summary: Store Gemini credentials in chrome.storage.session by default, optionally remember them in trusted local storage, never sync or persist them with reviews, and provide validate and clear actions.
+  - id: implement-gemini-provider
+    status: closed
+    area: generation
+    summary: Add Gemini BYOK generation for initial reviews, regeneration, and follow-up questions using structured response contracts and deterministic cleanup.
+  - id: add-provider-model-selection
+    status: closed
+    area: product
+    summary: Replace the Ollama-only model selector with provider and provider-specific model controls backed by a small explicit Gemini model allowlist.
+  - id: add-remote-data-disclosure
+    status: closed
+    area: privacy
+    summary: Clearly disclose which reviewer notes, product context, previous draft, and revision inputs are sent to Gemini while excluding account data, cookies, full page HTML, tab IDs, and URLs from provider requests.
+  - id: implement-blocking-generation-overlay
+    status: closed
+    area: ui
+    summary: Lock the review workspace during generation, prevent duplicate requests, show a dominant Generating Review message with provider/model context, and use a large animated indeterminate progress bar.
+  - id: add-generation-failure-recovery
+    status: closed
+    area: ui
+    summary: On provider failure, remove the workspace lock, preserve the previous usable draft, and display a normalized non-secret-bearing error.
+  - id: test-provider-and-secret-boundaries
+    status: closed
     area: testing
-    summary: Manually verify in Chrome that Create Review opens review.html, initial generation continues in the tab, copy buttons work, follow-up questions generate, and regeneration uses feedback/missing topics/follow-up answers.
+    summary: Automated tests and the full browser smoke pass cover provider selection, credential handling, secret redaction, generation, regeneration, follow-up questions, blocking-state behavior, failure recovery, and Ollama regression.
+  - id: update-gemini-user-documentation
+    status: closed
+    area: documentation
+    summary: Update README and project references with Gemini BYOK setup, settings navigation, remote-data handling, credential storage behavior, and validation steps.
+  - id: manual-smoke-full-tab-workspace
+    status: closed
+    area: testing
+    summary: Chrome manual QA passed for provider selection, Gemini credentials, initial generation, copy controls, follow-up questions, regeneration, the blocking overlay, failure recovery, and Ollama regression.
+  - id: design-provider-stage-tracker
+    status: backlog
+    area: ui
+    summary: Nice to have: evolve the generation overlay into a Domino's Pizza Tracker-style stage display with completed, active, and pending states but no fabricated percentages.
+  - id: plan-existing-review-enrichment
+    status: backlog
+    area: generation
+    summary: Low priority: sample a capped set of visible Amazon reviews for topic and vocabulary enrichment while preventing copied wording and borrowed reviewer experiences.
   - id: plan-review-history
     status: open
     area: persistence
     summary: Later, recommend best-practice local history storage, review version model, deletion behavior, privacy boundaries, and UI entry points.
-  - id: plan-provider-interface
-    status: open
-    area: architecture
-    summary: Sketch a future provider boundary for Ollama, hosted providers, and pluggable providers without implementing it for MVP.
   - id: add-popup-regression-tests
-    status: open
+    status: active
     area: testing
-    summary: Add automated coverage for prompt construction, JSON extraction, text cleanup, and error formatting if a test runner is introduced.
+    summary: Core parsing and provider tests exist; add browser-oriented popup and options-page coverage if a DOM-capable test harness is introduced.
   - id: document-manual-smoke-path
-    status: open
+    status: closed
     area: testing
-    summary: Expand manual validation for loading the unpacked extension, selecting an Ollama model, scraping an Amazon page, and copying generated output.
+    summary: Expand manual validation for provider selection, Gemini settings, credential storage, live generation, blocking wait state, and failure recovery.

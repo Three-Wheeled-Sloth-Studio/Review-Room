@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Review Author",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Generates a review of the product on the open Amazon product page.",
   "permissions": [
     "activeTab",
@@ -11,8 +11,16 @@
   ],
   "host_permissions": [
     "http://localhost:11434/*",
-    "http://127.0.0.1:11434/*"
+    "http://127.0.0.1:11434/*",
+    "https://generativelanguage.googleapis.com/*"
   ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "options_ui": {
+    "page": "settings.html",
+    "open_in_tab": true
+  },
   "action": {
     "default_popup": "popup.html",
     "default_icon": {

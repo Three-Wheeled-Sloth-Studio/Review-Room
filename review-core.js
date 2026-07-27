@@ -1,4 +1,5 @@
-const REVIEW_AUTHOR_OLLAMA_BASE_URL = 'http://localhost:11434';
+const REVIEW_AUTHOR_PROVIDER_OLLAMA = 'ollama';
+const REVIEW_AUTHOR_PROVIDER_GEMINI = 'gemini';
 
 function buildPrompt({
   comments,
@@ -92,72 +93,132 @@ ${currentDraft?.generatedReview || ''}
   `.trim();
 }
 
-async function generateReview({
-  model,
-  comments,
-  guidance,
-  productInfo,
-  previousDraft,
-  feedback,
-  missingTopics,
-  followUpAnswers,
-  onUpdate
-}) {
-  const response = await fetch(`${REVIEW_AUTHOR_OLLAMA_BASE_URL}/api/generate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model,
-      prompt: buildPrompt({
-        comments,
-        guidance,
-        productInfo,
-        previousDraft,
-        feedback,
-        missingTopics,
-        followUpAnswers
-      })
-    })
+async function generateReview(request) {
+  return sendReviewAuthorMessage({
+    type: 'provider.generateReview',
+    request: sanitizeProviderRequest(request)
   });
-
-  if (!response.ok) {
-    const error = new Error(`Ollama returned HTTP ${response.status}`);
-    error.status = response.status;
-    throw error;
-  }
-
-  const rawResponse = await readOllamaStream(response, text => {
-    if (onUpdate) {
-      onUpdate(extractReviewPreview(text));
-    }
-  });
-
-  return parseGeneratedResult(rawResponse);
 }
 
-async function generateFollowUpQuestions({ model, comments, productInfo, currentDraft }) {
-  const response = await fetch(`${REVIEW_AUTHOR_OLLAMA_BASE_URL}/api/generate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model,
-      prompt: buildFollowUpPrompt({ comments, productInfo, currentDraft })
-    })
+async function generateFollowUpQuestions(request) {
+  return sendReviewAuthorMessage({
+    type: 'provider.generateFollowUpQuestions',
+    request: sanitizeProviderRequest(request)
   });
+}
 
-  if (!response.ok) {
-    const error = new Error(`Ollama returned HTTP ${response.status}`);
-    error.status = response.status;
-    throw error;
+async function listProviderModels(provider) {
+  return sendReviewAuthorMessage({
+    type: 'provider.listModels',
+    provider
+  });
+}
+
+async function getProviderCredentialStatus(provider) {
+  return sendReviewAuthorMessage({
+    type: 'provider.getCredentialStatus',
+    provider
+  });
+}
+
+async function getGeminiCredentialSettings() {
+  return sendReviewAuthorMessage({
+    type: 'credentials.getGeminiSettings'
+  });
+}
+
+async function saveGeminiCredential({ apiKey, remember }) {
+  return sendReviewAuthorMessage({
+    type: 'credentials.saveGemini',
+    apiKey: String(apiKey || '').trim(),
+    remember: Boolean(remember)
+  });
+}
+
+async function clearGeminiCredential() {
+  return sendReviewAuthorMessage({
+    type: 'credentials.clearGemini'
+  });
+}
+
+async function validateGeminiCredential(apiKey) {
+  return sendReviewAuthorMessage({
+    type: 'credentials.validateGemini',
+    apiKey: String(apiKey || '').trim()
+  });
+}
+
+function sanitizeProviderRequest(request) {
+  return {
+    provider: request.provider || REVIEW_AUTHOR_PROVIDER_OLLAMA,
+    model: request.model || '',
+    comments: request.comments || '',
+    guidance: request.guidance || '',
+    productInfo: {
+      title: request.productInfo?.title || '',
+      description: request.productInfo?.description || ''
+    },
+    previousDraft: request.previousDraft || null,
+    feedback: request.feedback || '',
+    missingTopics: request.missingTopics || '',
+    followUpAnswers: request.followUpAnswers || '',
+    currentDraft: request.currentDraft || null
+  };
+}
+
+function sendReviewAuthorMessage(message) {
+  return new Promise((resolve, reject) => {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
+      reject(new Error('Chrome extension runtime is unavailable.'));
+      return;
+    }
+
+    chrome.runtime.sendMessage(message, response => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+
+      if (!response?.ok) {
+        const payload = response?.error || {};
+        const error = new Error(payload.message || 'The provider request failed.');
+        Object.assign(error, payload);
+        reject(error);
+        return;
+      }
+
+      resolve(response.data);
+    });
+  });
+}
+
+function parseGeneratedResult(rawResponse) {
+  const parsed = typeof rawResponse === 'string'
+    ? JSON.parse(extractJsonObject(rawResponse))
+    : rawResponse;
+
+  if (!parsed || typeof parsed !== 'object') {
+    throw createInvalidResponseError('Model did not return a review object.');
   }
 
-  const rawResponse = await readOllamaStream(response);
-  const parsed = JSON.parse(extractJsonObject(rawResponse));
-  const questions = Array.isArray(parsed.questions) ? parsed.questions : [];
+  const result = {
+    suggestedStars: cleanStars(parsed.suggestedStars),
+    generatedReview: cleanReviewText(parsed.generatedReview || ''),
+    title: cleanSingleLineText(parsed.title || '')
+  };
+
+  if (!result.suggestedStars || !result.generatedReview || !result.title) {
+    throw createInvalidResponseError('Model returned an incomplete review.');
+  }
+
+  return result;
+}
+
+function parseFollowUpQuestions(rawResponse) {
+  const parsed = typeof rawResponse === 'string'
+    ? JSON.parse(extractJsonObject(rawResponse))
+    : rawResponse;
+  const questions = Array.isArray(parsed?.questions) ? parsed.questions : [];
 
   return questions
     .map(question => cleanSingleLineText(question))
@@ -165,50 +226,10 @@ async function generateFollowUpQuestions({ model, comments, productInfo, current
     .slice(0, 5);
 }
 
-async function readOllamaStream(response, onUpdate) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let pending = '';
-  let rawResponse = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-
-    if (done) {
-      break;
-    }
-
-    pending += decoder.decode(value, { stream: true });
-    const lines = pending.split('\n');
-    pending = lines.pop();
-
-    for (const line of lines) {
-      if (!line.trim()) continue;
-
-      const parsed = JSON.parse(line);
-      rawResponse += parsed.response || '';
-      if (onUpdate) {
-        onUpdate(rawResponse);
-      }
-    }
-  }
-
-  if (pending.trim()) {
-    const parsed = JSON.parse(pending);
-    rawResponse += parsed.response || '';
-  }
-
-  return rawResponse;
-}
-
-function parseGeneratedResult(rawResponse) {
-  const parsed = JSON.parse(extractJsonObject(rawResponse));
-
-  return {
-    suggestedStars: cleanStars(parsed.suggestedStars),
-    generatedReview: cleanReviewText(parsed.generatedReview || ''),
-    title: cleanSingleLineText(parsed.title || '')
-  };
+function createInvalidResponseError(message) {
+  const error = new Error(message);
+  error.code = 'INVALID_RESPONSE';
+  return error;
 }
 
 function extractJsonObject(text) {
@@ -217,19 +238,10 @@ function extractJsonObject(text) {
   const end = trimmed.lastIndexOf('}');
 
   if (start === -1 || end === -1 || end <= start) {
-    throw new Error('Model did not return valid JSON.');
+    throw createInvalidResponseError('Model did not return valid JSON.');
   }
 
   return trimmed.slice(start, end + 1);
-}
-
-function extractReviewPreview(rawResponse) {
-  try {
-    const parsed = JSON.parse(extractJsonObject(rawResponse));
-    return cleanReviewText(parsed.generatedReview || '');
-  } catch (error) {
-    return cleanReviewText(rawResponse);
-  }
 }
 
 function cleanStars(value) {
@@ -289,10 +301,57 @@ function normalizeKeyboardPunctuation(text) {
     .replace(/[ \t]{2,}/g, ' ');
 }
 
+function formatProviderLabel(provider) {
+  return provider === REVIEW_AUTHOR_PROVIDER_GEMINI ? 'Gemini' : 'Ollama';
+}
+
 function formatGenerationError(error) {
-  if (error.status === 403) {
+  const code = error?.code || '';
+
+  if (code === 'MISSING_CREDENTIALS') {
+    return 'Gemini is not configured. Open Provider Settings and add your Gemini API key.';
+  }
+  if (code === 'INVALID_CREDENTIALS') {
+    return 'Gemini rejected the configured API key. Open Provider Settings to replace or validate it.';
+  }
+  if (code === 'RATE_LIMITED') {
+    return 'Gemini is rate limited right now. Try the request again shortly.';
+  }
+  if (code === 'MODEL_UNAVAILABLE') {
+    return 'The selected model is unavailable. Choose another model in Provider Settings.';
+  }
+  if (code === 'PROVIDER_OVERLOADED') {
+    return 'The model provider is temporarily overloaded. Try again shortly.';
+  }
+  if (code === 'NETWORK_ERROR') {
+    return 'The model provider could not be reached. Check your network connection and try again.';
+  }
+  if (code === 'SAFETY_BLOCKED') {
+    return 'The provider blocked this request under its safety rules.';
+  }
+  if (code === 'INVALID_RESPONSE') {
+    return 'The provider returned an invalid review format. Try generating it again.';
+  }
+  if (error?.provider === REVIEW_AUTHOR_PROVIDER_OLLAMA && error?.status === 403) {
     return 'Ollama rejected the Chrome extension origin. Quit Ollama from the tray, run restart-ollama-for-extension.cmd as administrator, then reload the extension.';
   }
 
-  return error.message;
+  return error?.message || 'The review request failed.';
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    buildPrompt,
+    buildFollowUpPrompt,
+    parseGeneratedResult,
+    parseFollowUpQuestions,
+    extractJsonObject,
+    cleanStars,
+    cleanSingleLineText,
+    cleanReviewText,
+    normalizeKeyboardPunctuation,
+    packReviewForPasting,
+    sanitizeProviderRequest,
+    formatGenerationError
+  };
 }

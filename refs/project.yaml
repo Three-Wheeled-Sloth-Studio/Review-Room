@@ -1,8 +1,9 @@
 version: 1
-updated: 2026-06-15
+updated: 2026-07-27
 identity:
   name: Review Author
-  repository_url: https://github.com/SlothMD/Review-Room
+  owner: Three-Wheeled-Sloth-Studio
+  repository_url: https://github.com/Three-Wheeled-Sloth-Studio/Review-Room
   summary: Chrome Manifest V3 extension that drafts Amazon product reviews from reviewer notes, Amazon page context, and a local Ollama model.
   current_phase: local-testing
 thesis:

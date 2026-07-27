@@ -1,6 +1,8 @@
 document.addEventListener('DOMContentLoaded', async function() {
   const sessionId = new URLSearchParams(window.location.search).get('sessionId');
+  const workspaceShell = document.getElementById('workspace-shell');
   const productTitle = document.getElementById('product-title');
+  const providerContext = document.getElementById('provider-context');
   const reviewTitle = document.getElementById('review-title');
   const suggestedStars = document.getElementById('suggested-stars');
   const generatedReview = document.getElementById('generated-review');
@@ -14,7 +16,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   const copyBodyBtn = document.getElementById('copy-body');
   const askFollowUpsBtn = document.getElementById('ask-follow-ups');
   const regenerateReviewBtn = document.getElementById('regenerate-review');
+  const workspaceSettingsBtn = document.getElementById('workspace-settings');
+  const operationLayer = document.getElementById('operation-layer');
+  const operationTitle = document.getElementById('operation-title');
+  const operationProvider = document.getElementById('operation-provider');
+  const operationDetail = document.getElementById('operation-detail');
   let session = null;
+  let isBusy = false;
 
   if (!sessionId) {
     setStatus('No review session was provided.');
@@ -33,6 +41,10 @@ document.addEventListener('DOMContentLoaded', async function() {
   normalizeSession();
   renderSession();
 
+  workspaceSettingsBtn.addEventListener('click', function() {
+    chrome.runtime.openOptionsPage();
+  });
+
   copyAllBtn.addEventListener('click', async function() {
     await navigator.clipboard.writeText(packReviewForPasting(getCurrentResult()));
     setStatus('Copied review.');
@@ -49,16 +61,22 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   askFollowUpsBtn.addEventListener('click', async function() {
-    setBusy(true, 'Asking follow-up questions...');
+    if (isBusy) return;
+    setBusy(true, {
+      title: 'Generating Questions',
+      detail: `Asking ${formatProviderLabel(session.provider)} for useful follow-up questions...`
+    });
 
     try {
       const questions = await generateFollowUpQuestions({
+        provider: session.provider,
         model: session.model,
         comments: session.comments,
         productInfo: session.productInfo,
         currentDraft: getCurrentResult()
       });
 
+      operationDetail.textContent = 'Formatting questions...';
       followUpQuestions.value = questions.join('\n');
       session.workspace.followUpQuestions = questions;
       await saveSession();
@@ -72,11 +90,17 @@ document.addEventListener('DOMContentLoaded', async function() {
   });
 
   regenerateReviewBtn.addEventListener('click', async function() {
+    if (isBusy) return;
     const previousDraft = getCurrentResult();
-    setBusy(true, 'Regenerating review...');
+    setBusy(true, {
+      title: 'Generating Review',
+      detail: `Sending revision context to ${formatProviderLabel(session.provider)}...`
+    });
 
     try {
+      operationDetail.textContent = 'Generating revised review...';
       const result = await generateReview({
+        provider: session.provider,
         model: session.model,
         comments: session.comments,
         guidance: session.guidance,
@@ -84,12 +108,10 @@ document.addEventListener('DOMContentLoaded', async function() {
         previousDraft,
         feedback: feedback.value,
         missingTopics: missingTopics.value,
-        followUpAnswers: followUpAnswers.value,
-        onUpdate: text => {
-          generatedReview.value = text || generatedReview.value;
-        }
+        followUpAnswers: followUpAnswers.value
       });
 
+      operationDetail.textContent = 'Formatting review...';
       session.result = result;
       session.workspace.feedback = feedback.value;
       session.workspace.missingTopics = missingTopics.value;
@@ -97,6 +119,8 @@ document.addEventListener('DOMContentLoaded', async function() {
       session.iterations.push({
         createdAt: new Date().toISOString(),
         type: 'regeneration',
+        provider: session.provider,
+        model: session.model,
         feedback: feedback.value,
         missingTopics: missingTopics.value,
         followUpAnswers: followUpAnswers.value,
@@ -137,6 +161,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
   function renderSession() {
     productTitle.textContent = session.productInfo?.title || 'Generated Review';
+    providerContext.textContent = `Provider: ${formatProviderLabel(session.provider)} | Model: ${session.model}`;
     renderResult(session.result);
     feedback.value = session.workspace?.feedback || '';
     missingTopics.value = session.workspace?.missingTopics || '';
@@ -164,25 +189,31 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   async function generateInitialReview() {
-    setBusy(true, 'Generating initial review...');
-    generatedReview.value = 'Generating review...';
+    if (isBusy) return;
+    const previousDraft = getCurrentResult();
+    setBusy(true, {
+      title: 'Generating Review',
+      detail: `Sending review context to ${formatProviderLabel(session.provider)}...`
+    });
 
     try {
+      operationDetail.textContent = 'Generating review...';
       const result = await generateReview({
+        provider: session.provider,
         model: session.model,
         comments: session.comments,
         guidance: session.guidance,
-        productInfo: session.productInfo,
-        onUpdate: text => {
-          generatedReview.value = text || generatedReview.value;
-        }
+        productInfo: session.productInfo
       });
 
+      operationDetail.textContent = 'Formatting review...';
       session.result = result;
       session.status = 'ready';
       session.iterations.push({
         createdAt: new Date().toISOString(),
         type: 'initial',
+        provider: session.provider,
+        model: session.model,
         result
       });
       renderResult(result);
@@ -192,7 +223,7 @@ document.addEventListener('DOMContentLoaded', async function() {
       console.error('Error generating review:', error);
       session.status = 'error';
       await saveSession();
-      generatedReview.value = '';
+      renderResult(previousDraft);
       setStatus(`Error generating review: ${formatGenerationError(error)}`);
     } finally {
       setBusy(false);
@@ -200,6 +231,8 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 
   function normalizeSession() {
+    session.provider = session.provider || REVIEW_AUTHOR_PROVIDER_OLLAMA;
+    session.providerConfigVersion = session.providerConfigVersion || 1;
     session.iterations = Array.isArray(session.iterations) ? session.iterations : [];
     session.workspace = session.workspace || {
       feedback: '',
@@ -213,21 +246,23 @@ document.addEventListener('DOMContentLoaded', async function() {
     session.status = session.status || (session.result ? 'ready' : 'pending');
   }
 
-  function setBusy(isBusy, message) {
-    askFollowUpsBtn.disabled = isBusy;
-    regenerateReviewBtn.disabled = isBusy;
-    copyAllBtn.disabled = isBusy;
-    copyTitleBtn.disabled = isBusy;
-    copyBodyBtn.disabled = isBusy;
+  function setBusy(busy, options = {}) {
+    isBusy = busy;
+    workspaceShell.setAttribute('aria-busy', String(busy));
+    document.body.classList.toggle('is-busy', busy);
+    operationLayer.hidden = !busy;
+    setControlsDisabled(busy);
 
-    if (message) {
-      setStatus(message);
+    if (busy) {
+      operationTitle.textContent = options.title || 'Generating Review';
+      operationProvider.textContent = `${formatProviderLabel(session.provider)} | ${session.model}`;
+      operationDetail.textContent = options.detail || 'Generating review...';
     }
   }
 
-  function setControlsDisabled(isDisabled) {
-    [copyAllBtn, copyTitleBtn, copyBodyBtn, askFollowUpsBtn, regenerateReviewBtn].forEach(button => {
-      button.disabled = isDisabled;
+  function setControlsDisabled(disabled) {
+    workspaceShell.querySelectorAll('button, input, textarea, select').forEach(control => {
+      control.disabled = disabled;
     });
   }
 
