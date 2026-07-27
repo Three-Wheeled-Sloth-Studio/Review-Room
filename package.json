@@ -1,0 +1,9 @@
+{
+  "name": "review-author-extension",
+  "private": true,
+  "version": "1.1.0",
+  "scripts": {
+    "check": "node --check popup.js && node --check review-core.js && node --check review.js && node --check settings.js && node --check service-worker.js && node --check provider-errors.js && node --check ollama-provider.js && node --check gemini-provider.js && node --check content.js",
+    "test": "node --test"
+  }
+}

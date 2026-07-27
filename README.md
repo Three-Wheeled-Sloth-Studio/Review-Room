@@ -1,141 +1,153 @@
 # Review Author
 
-Review Author is a Chrome Manifest V3 extension that drafts Amazon product reviews using a local Ollama model. It reads basic product context from the active Amazon product page, combines that with reviewer notes from the popup, and generates separate plain-text fields for Amazon's review form.
+Review Author is a Chrome Manifest V3 extension that drafts Amazon product reviews from reviewer notes and basic product-page context. It supports local Ollama models and remote Gemini models using only a user-supplied Gemini API key.
 
 ## Current Status
 
-The extension is ready for local testing.
+The Gemini BYOK implementation is ready for Chrome smoke testing.
 
-- Chrome extension manifest loads with valid icons.
-- Popup lists local Ollama models from `http://localhost:11434/api/tags`.
-- Review generation runs from the popup against `http://localhost:11434/api/generate`.
-- Amazon page scraping is limited to product title and description/bullets for factual context.
-- Reviewer notes are weighted above listing text to avoid marketing-copy output.
-- Generated output is opened in a durable review workspace tab and split into Suggested Stars, Generated Review, and Title.
-- The review workspace provides explicit copy buttons for full review, title, and body.
-- Generated review/title text is scrubbed into plain text by removing common LLM preambles, Markdown headings, bold/italic markup, bullets, numbered lists, and dividers.
-- `restart-ollama-for-extension.cmd` configures Ollama to accept browser extension origins.
+- The popup supports provider and provider-specific model selection.
+- Ollama remains available through `http://localhost:11434`.
+- Gemini uses the current Interactions API with structured JSON responses.
+- Gemini credentials are stored in `chrome.storage.session` by default.
+- Users may optionally remember a key in trusted local extension storage on the current device.
+- Keys are never stored in synchronized settings, review sessions, iteration history, logs, or exported review text.
+- Initial generation, regeneration, and follow-up questions use the selected provider.
+- The review workspace locks during generation and shows a dominant indeterminate progress state.
+- Existing review sessions without a provider field continue to open as Ollama sessions.
+- Amazon scraping remains limited to product title and description or feature bullets.
 
 ## Files
 
-- `manifest.json`: Chrome MV3 configuration, permissions, icons, and host access.
-- `popup.html`: Extension popup markup.
-- `popup.js`: Ollama model loading, product-page scraping, guidance migration, pending session creation, and review workspace tab launch.
-- `review.html`: Durable full-tab review workspace opened after generation.
-- `review.js`: Review workspace behavior, copy controls, feedback regeneration, missing-topic input, follow-up questions, and session persistence.
-- `review-core.js`: Shared Ollama generation, prompt building, JSON parsing, text cleanup, and clipboard helpers.
-- `styles.css`: Popup layout and styling.
-- `content.js`: Minimal product-info helper retained for compatibility.
-- `restart-ollama-for-extension.cmd`: Optional helper to set `OLLAMA_ORIGINS` and restart Ollama on Windows.
-- `images/`: Extension icons.
-- `refs/`: Agent-Academy project-memory harness for durable planning, architecture, testing, operations, and handoff notes.
-
-## Agent-Academy Harness
-
-This repo includes the `refs/` harness initialized from `SlothMD/Agent-Academy`. Agents and collaborators should start with `refs/project.yaml`, `refs/agents.yaml`, `refs/planning/roadmap.yaml`, `refs/planning/todos.yaml`, and `refs/testing/validationCommands.yaml` before making implementation changes.
+- `manifest.json`: Chrome MV3 configuration, service worker, options page, permissions, icons, and host access.
+- `popup.html` and `popup.js`: Provider and model selection, product scraping, guidance, session creation, and settings entry points.
+- `settings.html` and `settings.js`: Gemini API key validation, session or remembered storage choice, model default, and key clearing.
+- `service-worker.js`: Trusted provider runtime, credential access, provider routing, and error serialization.
+- `ollama-provider.js`: Local Ollama model discovery and generation transport.
+- `gemini-provider.js`: Gemini model allowlist, structured schemas, validation, generation, response extraction, and transient retry behavior.
+- `provider-errors.js`: Normalized provider errors and secret-safe serialization.
+- `review.html` and `review.js`: Durable review workspace, copy controls, feedback iteration, follow-up questions, session persistence, and blocking generation state.
+- `review-core.js`: Provider-neutral prompts, messaging, parsing, cleanup, clipboard helpers, and error presentation.
+- `styles.css`: Popup, workspace, settings, and blocking-operation styling.
+- `tests/`: Node tests for structured parsing, secret boundaries, model allowlisting, response extraction, and cleanup.
+- `refs/`: Durable planning, architecture, testing, and handoff notes.
 
 ## Requirements
 
 - Google Chrome with extension developer mode.
-- Ollama installed locally.
-- At least one Ollama model pulled locally.
+- For Ollama: Ollama installed, running, and at least one model pulled.
+- For Gemini: A Gemini API key created in Google AI Studio.
 
-Example:
+Example Ollama model:
 
 ```cmd
 ollama pull qwen2.5:7b-instruct
 ```
 
-## Local Setup
+## Load the Extension
 
-1. Start Ollama.
-
-```cmd
-ollama serve
-```
-
-2. Open Chrome and go to:
+1. Clone or pull the repository branch you want to test.
+2. Open Chrome at:
 
 ```text
 chrome://extensions
 ```
 
 3. Enable Developer Mode.
-
 4. Click `Load unpacked`.
-
-5. Select this project directory:
-
-```text
-D:\Apps\Review-Author
-```
-
+5. Select the repository directory.
 6. Open an Amazon product page.
+7. Open Review Author and choose either `Local Ollama` or `Gemini`.
 
-7. Open the Review Author extension popup, select an Ollama model, add reviewer notes, and click `Create Review`.
+## Configure Gemini BYOK
 
-The popup opens a full-tab review workspace, and the workspace generates the review in that durable tab. The workspace has three editable output fields:
+1. Open the Review Author popup.
+2. Click `Settings`, or select Gemini and click `Configure Gemini`.
+3. Create or retrieve a Gemini API key from Google AI Studio.
+4. Paste the key into Provider Settings.
+5. Choose whether to remember it on the current device.
+6. Click `Save and Validate`.
+7. Return to the Amazon page, reopen the popup, select Gemini, and create the review.
 
-- `Suggested Stars`: A whole-number rating from 1 to 5 inferred from the reviewer notes.
-- `Generated Review`: The plain-text review body.
-- `Title`: A short plain-text review title.
+Session-only keys are cleared when Chrome restarts. Remembered keys are stored in Chrome extension storage on the current device. Chrome extension storage is not an encrypted password vault.
 
-The review workspace includes copy buttons for the full review, title, and body. The full review copy format is:
+Review Author does not use a studio-owned API key and does not call a Three-Wheeled Sloth Studio generation service.
 
-```text
-Title
+## Remote Data Boundary
 
-Generated Review
-```
+When Gemini is selected, Review Author may send:
+
+- Reviewer notes.
+- Scraped product title.
+- Scraped product description or feature bullets.
+- Previous generated draft during regeneration.
+- User feedback, missing topics, and follow-up answers supplied for the request.
+
+It does not send:
+
+- Gemini credentials inside the review request object.
+- Amazon cookies or account data.
+- Purchase history.
+- Full page HTML.
+- Unrelated page content.
+- Source tab IDs or URLs.
+
+## Review Workspace
+
+The popup opens a durable full-tab workspace with editable fields for:
+
+- Suggested Stars.
+- Generated Review.
+- Title.
+
+The workspace also provides copy actions, regeneration feedback, missing-topic input, and product-specific follow-up questions.
+
+During generation, the workspace is locked behind a full-screen operation layer with:
+
+- A dominant `Generating Review` message.
+- Provider and model context.
+- A large animated indeterminate progress bar.
+- A clear operation message.
+
+The workspace unlocks after success or failure. Failed regeneration preserves the prior usable draft.
 
 ## Ollama Origin Handling
 
-Ollama must allow requests from browser extension origins. Run:
+Ollama must allow browser extension origins. Run:
 
 ```cmd
 restart-ollama-for-extension.cmd
 ```
 
-That script sets:
+The helper sets:
 
 ```cmd
 OLLAMA_ORIGINS=chrome-extension://*,moz-extension://*,safari-web-extension://*
 ```
 
-Then it attempts to restart Ollama and verify that extension-style origins are accepted. If Windows denies process termination, quit Ollama from the taskbar tray or run the script as administrator.
+If Windows denies process termination, quit Ollama from the tray or run the script as administrator.
 
 ## Guidance Behavior
 
-The default guidance is designed to produce structured, paste-ready review fields:
+The default guidance requests separate structured fields for suggested stars, review body, and title. Reviewer notes remain the primary source of truth. Product-page text is factual context only.
 
-- No preamble such as "Okay, here's a review."
-- No Markdown.
-- No headers, bullets, rating, or sign-off.
-- Reviewer notes are treated as the source of truth.
-- Narrative asides, dry jokes, sarcastic observations, wry phrasing, and specific angles in reviewer notes are preserved and worked into the review.
-- Product-page text is used only as factual context.
-- Generated reviews are nudged toward 2-3 real paragraphs: first impression or experience, practical details or tradeoffs, and an optional final judgment.
-- Sparse notes should be expanded through implications and careful phrasing, not invented facts or personal experience.
-- The voice should sound like a real person reviewing the item, not a manufacturer selling it.
-- Generated text should use only plain ASCII punctuation available on a standard US keyboard.
-- Suggested stars, generated review, and title are requested as JSON internally, then displayed as separate fields.
-
-Existing saved guidance is automatically upgraded when it lacks any current default guidance field.
+Generated text is deterministically cleaned to remove common LLM preambles, Markdown, and non-US-keyboard punctuation before display.
 
 ## Validation
 
-Run these checks from the project root:
+Run:
 
 ```cmd
-node --check popup.js
-node --check review-core.js
-node --check review.js
-node --check content.js
+npm test
+npm run check
 node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest json ok')"
 ```
 
+Then complete the manual Chrome smoke path in `refs/testing/validationCommands.yaml`.
+
 ## Known Limitations
 
-- The popup depends on a local Ollama server being reachable at `localhost:11434`.
-- Amazon markup changes may require updating selectors in `scrapeProductInfo`.
-- The plain-text scrubber removes common Markdown patterns but is intentionally conservative to avoid damaging normal review text.
+- A real Gemini key is required for live Gemini smoke testing and is never used by normal automated tests.
+- Chrome smoke testing is still required for service-worker messaging, extension storage, options-page navigation, and the blocking operation layer.
+- Amazon markup changes may require updates to `scrapeProductInfo`.
+- Existing-review enrichment is planned as a later, low-priority enhancement.

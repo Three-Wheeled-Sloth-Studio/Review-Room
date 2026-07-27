@@ -8,15 +8,15 @@ roadmap:
   - id: stabilize-local-extension
     horizon: now
     status: active
-    summary: Keep the Chrome extension reliable for local Amazon review drafting with Ollama while provider boundaries are introduced.
+    summary: Keep the Chrome extension reliable for local Amazon review drafting with Ollama while Gemini BYOK moves through browser smoke testing.
   - id: gemini-byok-provider
     horizon: now
-    status: planned
-    summary: Add Gemini as an optional remote provider using only user-supplied credentials, extension settings, structured output, provider-aware sessions, and no studio-hosted service or studio-owned key.
+    status: implementation-complete
+    summary: Gemini BYOK provider, extension settings, credential isolation, structured generation, provider-aware sessions, and model selection are implemented and awaiting live Chrome smoke validation.
   - id: blocking-generation-state
     horizon: now
-    status: planned
-    summary: Lock the review workspace during generation and show a dominant Generating Review state with an animated indeterminate progress bar and honest operation messages.
+    status: implementation-complete
+    summary: The review workspace now locks during generation and shows a dominant operation layer with provider/model context and an animated indeterminate progress bar; browser smoke validation remains.
   - id: provider-stage-tracker
     horizon: next
     status: nice-to-have

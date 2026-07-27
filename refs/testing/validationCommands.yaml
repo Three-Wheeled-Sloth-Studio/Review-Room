@@ -1,21 +1,27 @@
 version: 1
-updated: 2026-06-15
+updated: 2026-07-27
 commands:
-  - id: syntax-popup
-    command: node --check popup.js
-    purpose: Validate popup JavaScript parses before loading the extension.
-  - id: syntax-review-core
-    command: node --check review-core.js
-    purpose: Validate shared review generation JavaScript parses.
-  - id: syntax-review-workspace
-    command: node --check review.js
-    purpose: Validate full-tab review workspace JavaScript parses.
-  - id: syntax-content
-    command: node --check content.js
-    purpose: Validate content helper JavaScript parses.
+  - id: syntax-all
+    command: npm run check
+    purpose: Validate popup, workspace, settings, service worker, provider, and compatibility JavaScript parses before loading the extension.
+  - id: unit-tests
+    command: npm test
+    purpose: Run provider-neutral parsing, cleanup, Gemini response extraction, model allowlist, and secret-boundary tests.
   - id: manifest-json
     command: node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest json ok')"
     purpose: Validate the Chrome extension manifest is valid JSON.
-  - id: manual-extension-smoke
-    command: Load unpacked extension in Chrome, open an Amazon product page, select an Ollama model, enter reviewer notes, run Create Review, and confirm the review workspace tab opens with suggested stars, title, review body, copy controls, feedback regeneration controls, missing-topic input, and follow-up question controls.
-    purpose: End-to-end browser smoke test that cannot be fully covered by current command-line checks.
+  - id: manual-ollama-smoke
+    command: Load the unpacked extension, open an Amazon product page, select Local Ollama and a model, enter reviewer notes, create a review, ask follow-up questions, regenerate with feedback, and verify copy actions.
+    purpose: Confirm the provider abstraction preserves all existing local Ollama workflows.
+  - id: manual-gemini-settings-smoke
+    command: Open Settings from the popup, save and validate a Gemini key as session-only, reopen the popup, confirm Gemini reports ready, then clear the key and confirm generation is blocked with a Configure Gemini route.
+    purpose: Confirm direct options-page navigation, BYOK validation, session storage, missing-key handling, and key clearing.
+  - id: manual-gemini-generation-smoke
+    command: Configure a test Gemini key, open an Amazon product page, select Gemini and gemini-3.6-flash, create a review, confirm the full-screen Generating Review lock appears, then test regeneration and follow-up questions.
+    purpose: Confirm live Gemini structured generation and obvious blocking wait-state behavior.
+  - id: manual-remembered-key-smoke
+    command: Save a Gemini key with Remember this key on this device enabled, restart Chrome, confirm Gemini remains configured, then disable remembering and restart Chrome again to confirm session-only behavior.
+    purpose: Confirm remembered local key behavior and migration between local and session credential storage.
+  - id: manual-failure-recovery
+    command: Start from a usable draft, force a provider failure using an invalid or unavailable model configuration, and confirm the operation layer closes, controls unlock, the previous draft remains intact, and the error contains no key material.
+    purpose: Confirm blocking-state recovery and non-secret-bearing error presentation.

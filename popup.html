@@ -4,27 +4,48 @@
   <title>Review Author</title>
   <link rel="stylesheet" type="text/css" href="styles.css">
 </head>
-<body>
+<body class="popup-body">
   <div class="container">
-    <h1>Review Author</h1>
-    <div class="form-group">
-      <label for="ollama-model">Ollama Model:</label>
-      <select id="ollama-model">
-        <!-- Models will be populated dynamically -->
-      </select>
+    <header class="popup-header">
+      <h1>Review Author</h1>
+      <button id="open-settings" class="compact-button" type="button" title="Provider Settings">Settings</button>
+    </header>
+
+    <div class="provider-grid">
+      <div class="form-group">
+        <label for="provider">Provider:</label>
+        <select id="provider">
+          <option value="ollama">Local Ollama</option>
+          <option value="gemini">Gemini</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="model">Model:</label>
+        <select id="model"></select>
+      </div>
     </div>
+
+    <div id="gemini-config-panel" class="provider-notice" hidden>
+      <strong id="gemini-config-status">Gemini is not configured.</strong>
+      <button id="configure-gemini" class="secondary-button" type="button">Configure Gemini</button>
+    </div>
+
+    <div id="remote-disclosure" class="provider-disclosure" hidden>
+      Gemini sends your reviewer notes and the scraped product title and description to Google for generation. Amazon account data, cookies, purchase history, and page HTML are not sent.
+    </div>
+
     <div class="form-group">
       <label for="reviewer-comments">Reviewer Comments:</label>
-      <textarea id="reviewer-comments" rows="4"></textarea>
+      <textarea id="reviewer-comments" rows="5"></textarea>
     </div>
-    <button id="create-review">Create Review</button>
+    <button id="create-review" class="primary-button" type="button">Create Review</button>
     <div class="form-group">
       <label for="generation-status">Status:</label>
-      <textarea id="generation-status" rows="5" readonly></textarea>
+      <textarea id="generation-status" rows="4" readonly></textarea>
     </div>
     <div class="form-group">
       <label for="guidance">Guidance (JSON):</label>
-      <textarea id="guidance" rows="5"></textarea>
+      <textarea id="guidance" rows="6"></textarea>
     </div>
   </div>
   <script src="review-core.js"></script>
