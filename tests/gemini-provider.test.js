@@ -8,6 +8,8 @@ function loadGeminiProvider() {
     console,
     setTimeout,
     clearTimeout,
+    setInterval,
+    clearInterval,
     REVIEW_AUTHOR_PROVIDER_GEMINI: 'gemini',
     createProviderError: details => Object.assign(new Error(details.message), details),
     parseGeneratedResult: value => value,
@@ -20,6 +22,8 @@ function loadGeminiProvider() {
     REVIEW_AUTHOR_GEMINI_INTERACTIONS_URL,
     REVIEW_AUTHOR_GEMINI_MODELS_URL,
     buildGeminiInteractionRequest,
+    parseGeminiSseEventBlock,
+    extractGeminiStreamEventText,
     extractGeminiOutputText,
     geminiIsAllowedModel,
     cleanProviderMessage
@@ -50,7 +54,7 @@ test('Gemini uses stable v1 REST endpoints', () => {
   assert.equal(provider.REVIEW_AUTHOR_GEMINI_MODELS_URL, 'https://generativelanguage.googleapis.com/v1/models?pageSize=1');
 });
 
-test('Gemini requests explicitly disable server-side interaction storage', () => {
+test('Gemini requests use stateless streaming transport', () => {
   const provider = loadGeminiProvider();
   const request = provider.buildGeminiInteractionRequest({
     model: 'gemini-3.6-flash',
@@ -59,9 +63,25 @@ test('Gemini requests explicitly disable server-side interaction storage', () =>
   });
 
   assert.equal(request.store, false);
+  assert.equal(request.stream, true);
   assert.equal(request.model, 'gemini-3.6-flash');
   assert.equal(request.input, 'Draft a review');
   assert.equal(request.response_format.mime_type, 'application/json');
+});
+
+test('Gemini SSE parser reads text deltas', () => {
+  const provider = loadGeminiProvider();
+  const event = provider.parseGeminiSseEventBlock([
+    'event: step.delta',
+    'data: {"index":1,"delta":{"type":"text","text":"{\\"title\\":\\"Good\\"}"},"event_type":"step.delta"}'
+  ].join('\n'));
+
+  assert.equal(provider.extractGeminiStreamEventText(event), '{"title":"Good"}');
+});
+
+test('Gemini SSE parser ignores the terminal done marker', () => {
+  const provider = loadGeminiProvider();
+  assert.equal(provider.parseGeminiSseEventBlock('event: done\ndata: [DONE]'), null);
 });
 
 test('provider messages redact API key-shaped values', () => {
