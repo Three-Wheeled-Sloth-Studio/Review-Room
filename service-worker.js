@@ -1,9 +1,24 @@
-importScripts(
+const REVIEW_AUTHOR_PROVIDER_SCRIPTS = Object.freeze([
   'review-core.js',
   'provider-errors.js',
   'ollama-provider.js',
   'gemini-provider.js'
-);
+]);
+
+let providerBootstrapError = null;
+
+for (const script of REVIEW_AUTHOR_PROVIDER_SCRIPTS) {
+  try {
+    importScripts(script);
+  } catch (error) {
+    providerBootstrapError = new Error(
+      `Review Author could not load ${script}. Pull the latest files and reload the extension from chrome://extensions. ${error?.message || ''}`.trim()
+    );
+    providerBootstrapError.code = 'SERVICE_WORKER_BOOTSTRAP_FAILED';
+    console.error('Review Author service worker bootstrap failed.', script, error);
+    break;
+  }
+}
 
 const GEMINI_SESSION_KEY = 'reviewAuthorGeminiApiKey';
 const GEMINI_LOCAL_KEY = 'reviewAuthorGeminiApiKey';
@@ -16,9 +31,14 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (providerBootstrapError) {
+    sendResponse({ ok: false, error: serializeWorkerError(providerBootstrapError) });
+    return true;
+  }
+
   handleRuntimeMessage(message)
     .then(data => sendResponse({ ok: true, data }))
-    .catch(error => sendResponse({ ok: false, error: serializeProviderError(error) }));
+    .catch(error => sendResponse({ ok: false, error: serializeWorkerError(error) }));
 
   return true;
 });
@@ -177,6 +197,20 @@ async function clearGeminiSettings() {
   ]);
 
   return { configured: false, remember: false };
+}
+
+function serializeWorkerError(error) {
+  if (typeof serializeProviderError === 'function') {
+    return serializeProviderError(error);
+  }
+
+  return {
+    provider: null,
+    code: error?.code || 'SERVICE_WORKER_BOOTSTRAP_FAILED',
+    status: null,
+    retryable: false,
+    message: String(error?.message || 'Review Author background service failed to start.').slice(0, 500)
+  };
 }
 
 async function initializeTrustedStorage() {
