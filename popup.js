@@ -24,34 +24,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     "Punctuation": "Use only plain ASCII punctuation available on a standard US keyboard. Do not use em dashes, en dashes, curly quotes, ellipses, bullets, or decorative punctuation. Prefer commas, periods, colons, semicolons, parentheses, or short sentences."
   };
 
-  try {
-    const saved = await chrome.storage.sync.get([
-      'guidance',
-      'selectedProvider',
-      'providerModels',
-      'ollamaModel'
-    ]);
-
-    guidance.value = saved.guidance
-      ? upgradeGuidance(saved.guidance, defaultGuidance)
-      : JSON.stringify(defaultGuidance, null, 2);
-
-    if (!saved.guidance || guidance.value !== saved.guidance) {
-      await chrome.storage.sync.set({ guidance: guidance.value });
-    }
-
-    providerModels = saved.providerModels || {};
-    if (!providerModels.ollama && saved.ollamaModel) {
-      providerModels.ollama = saved.ollamaModel;
-    }
-    providerModels.gemini = providerModels.gemini || 'gemini-3.6-flash';
-    providerSelect.value = saved.selectedProvider || REVIEW_AUTHOR_PROVIDER_OLLAMA;
-
-    await refreshProviderUi();
-  } catch (error) {
-    console.error('Error initializing Review Author popup:', error);
-    setStatus(formatGenerationError(error));
-  }
+  openSettingsBtn.addEventListener('click', openProviderSettings);
+  configureGeminiBtn.addEventListener('click', openProviderSettings);
 
   providerSelect.addEventListener('change', async function() {
     await chrome.storage.sync.set({ selectedProvider: providerSelect.value });
@@ -66,9 +40,6 @@ document.addEventListener('DOMContentLoaded', async function() {
   guidance.addEventListener('change', function() {
     chrome.storage.sync.set({ guidance: guidance.value });
   });
-
-  openSettingsBtn.addEventListener('click', openProviderSettings);
-  configureGeminiBtn.addEventListener('click', openProviderSettings);
 
   createReviewBtn.addEventListener('click', async function() {
     const provider = providerSelect.value;
@@ -134,6 +105,35 @@ document.addEventListener('DOMContentLoaded', async function() {
       createReviewBtn.disabled = false;
     }
   });
+
+  try {
+    const saved = await chrome.storage.sync.get([
+      'guidance',
+      'selectedProvider',
+      'providerModels',
+      'ollamaModel'
+    ]);
+
+    guidance.value = saved.guidance
+      ? upgradeGuidance(saved.guidance, defaultGuidance)
+      : JSON.stringify(defaultGuidance, null, 2);
+
+    if (!saved.guidance || guidance.value !== saved.guidance) {
+      await chrome.storage.sync.set({ guidance: guidance.value });
+    }
+
+    providerModels = saved.providerModels || {};
+    if (!providerModels.ollama && saved.ollamaModel) {
+      providerModels.ollama = saved.ollamaModel;
+    }
+    providerModels.gemini = providerModels.gemini || 'gemini-3.6-flash';
+    providerSelect.value = saved.selectedProvider || REVIEW_AUTHOR_PROVIDER_OLLAMA;
+
+    await refreshProviderUi();
+  } catch (error) {
+    console.error('Error initializing Review Author popup:', error);
+    setStatus(formatGenerationError(error));
+  }
 
   async function refreshProviderUi() {
     const provider = providerSelect.value;
@@ -204,8 +204,15 @@ document.addEventListener('DOMContentLoaded', async function() {
   }
 });
 
-function openProviderSettings() {
-  chrome.runtime.openOptionsPage();
+async function openProviderSettings() {
+  const settingsUrl = chrome.runtime.getURL('settings.html');
+
+  try {
+    await chrome.tabs.create({ url: settingsUrl });
+  } catch (error) {
+    console.error('Could not open Review Author Provider Settings:', error);
+    window.open(settingsUrl, '_blank', 'noopener,noreferrer');
+  }
 }
 
 function upgradeGuidance(savedGuidance, defaultGuidance) {
